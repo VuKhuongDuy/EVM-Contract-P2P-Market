@@ -5,12 +5,13 @@ import "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import "lib/openzeppelin-contracts/contracts/utils/Pausable.sol";
 
 /**
  * @title P2PMarket
  * @dev A P2P market contract for trading between two ERC20 tokens
  */
-contract P2PMarket is Ownable, ReentrancyGuard {
+contract P2PMarket is Ownable, ReentrancyGuard, Pausable {
     // Order structure
     struct Order {
         uint256 orderId;
@@ -21,7 +22,6 @@ contract P2PMarket is Ownable, ReentrancyGuard {
         uint256 amountRemaining; // Remaining amount to sell
         uint256 pricePerToken; // Price in tokenToPay per unit of tokenToSell
         uint256 minOrderSize; // Minimum order size for partial fills
-        bool isActive;
         uint256 createdAt;
     }
 
@@ -71,7 +71,7 @@ contract P2PMarket is Ownable, ReentrancyGuard {
         uint256 amountToSell,
         uint256 pricePerToken,
         uint256 minOrderSize
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         require(
             tokenToSell != address(0) && tokenToPay != address(0),
             "Invalid token addresses"
@@ -84,7 +84,6 @@ contract P2PMarket is Ownable, ReentrancyGuard {
             "Invalid min order size"
         );
 
-        // Transfer tokens from seller to contract
         IERC20(tokenToSell).transferFrom(
             msg.sender,
             address(this),
@@ -103,7 +102,6 @@ contract P2PMarket is Ownable, ReentrancyGuard {
             amountRemaining: amountToSell,
             pricePerToken: pricePerToken,
             minOrderSize: minOrderSize,
-            isActive: true,
             createdAt: block.timestamp
         });
 
@@ -126,9 +124,8 @@ contract P2PMarket is Ownable, ReentrancyGuard {
     function fillOrder(
         uint256 orderId,
         uint256 amountToBuy
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
-        require(order.isActive, "Order is not active");
         require(amountToBuy > 0, "Amount must be greater than 0");
         require(
             amountToBuy <= order.amountRemaining,
@@ -142,23 +139,18 @@ contract P2PMarket is Ownable, ReentrancyGuard {
         uint256 paymentAmount = (amountToBuy * order.pricePerToken) /
             (10 ** ERC20(order.tokenToSell).decimals());
 
-        // Transfer payment tokens from buyer to contract
+        order.amountRemaining -= amountToBuy;
+
         IERC20(order.tokenToPay).transferFrom(
             msg.sender,
             address(this),
             paymentAmount
         );
-
-        // Transfer sold tokens to buyer
         IERC20(order.tokenToSell).transfer(msg.sender, amountToBuy);
-
-        // Transfer payment to seller
         IERC20(order.tokenToPay).transfer(order.seller, paymentAmount);
 
-        // Update order
-        order.amountRemaining -= amountToBuy;
         if (order.amountRemaining == 0) {
-            order.isActive = false;
+            delete orders[orderId];
         }
 
         emit OrderFilled(orderId, msg.sender, amountToBuy, paymentAmount);
@@ -168,10 +160,9 @@ contract P2PMarket is Ownable, ReentrancyGuard {
      * @dev Cancel an order (seller only)
      * @param orderId ID of the order to cancel
      */
-    function cancelOrder(uint256 orderId) external nonReentrant {
+    function cancelOrder(uint256 orderId) external nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
         require(order.seller == msg.sender, "Only seller can cancel");
-        require(order.isActive, "Order is not active");
 
         // Return remaining tokens to seller
         if (order.amountRemaining > 0) {
@@ -181,7 +172,8 @@ contract P2PMarket is Ownable, ReentrancyGuard {
             );
         }
 
-        order.isActive = false;
+        delete orders[orderId];
+
         emit OrderCancelled(orderId, msg.sender);
     }
 
@@ -195,10 +187,9 @@ contract P2PMarket is Ownable, ReentrancyGuard {
         uint256 orderId,
         uint256 newPrice,
         uint256 newMinOrderSize
-    ) external {
+    ) external whenNotPaused {
         Order storage order = orders[orderId];
         require(order.seller == msg.sender, "Only seller can update");
-        require(order.isActive, "Order is not active");
         require(newPrice > 0, "Price must be greater than 0");
         require(
             newMinOrderSize > 0 && newMinOrderSize <= order.amountRemaining,
@@ -241,5 +232,13 @@ contract P2PMarket is Ownable, ReentrancyGuard {
     ) external onlyOwner {
         require(to != address(0), "Invalid recipient");
         IERC20(token).transfer(to, amount);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }
