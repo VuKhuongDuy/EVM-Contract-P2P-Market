@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/Market.sol";
 import "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "lib/openzeppelin-contracts-upgradeable/contracts/utils/PausableUpgradeable.sol";
 
 // Mock ERC20 tokens for testing
 contract MockToken is ERC20 {
@@ -229,7 +231,7 @@ contract MarketTest is Test {
         vm.startPrank(seller);
         vm.expectRevert(
             abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
+                OwnableUpgradeable.OwnableUnauthorizedAccount.selector,
                 seller
             )
         );
@@ -240,7 +242,7 @@ contract MarketTest is Test {
 
         vm.startPrank(seller);
         vm.expectRevert(
-            abi.encodeWithSelector(Pausable.EnforcedPause.selector)
+            abi.encodeWithSelector(PausableUpgradeable.EnforcedPause.selector)
         );
         market.placeOrder(
             address(tokenA),

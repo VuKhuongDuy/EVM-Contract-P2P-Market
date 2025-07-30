@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
 
 import "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -9,18 +9,17 @@ import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
  * @dev A complete ERC20 implementation with minting and burning functionality
  */
 contract MyERC20 is ERC20, Ownable {
-    
     // Events
     event TokensMinted(address indexed to, uint256 amount);
     event TokensBurned(address indexed from, uint256 amount);
     event MaxSupplyUpdated(uint256 newMaxSupply);
-    
+
     // Maximum supply of tokens
     uint256 public maxSupply;
-    
+
     // Whether minting is enabled
     bool public mintingEnabled = true;
-    
+
     /**
      * @dev Constructor to initialize the token
      * @param name_ The name of the token
@@ -35,12 +34,12 @@ contract MyERC20 is ERC20, Ownable {
         uint256 maxSupply_
     ) ERC20(name_, symbol_) Ownable(msg.sender) {
         maxSupply = maxSupply_;
-        
+
         if (initialSupply_ > 0) {
             _mint(msg.sender, initialSupply_);
         }
     }
-    
+
     /**
      * @dev Mint new tokens (owner only)
      * @param to The address to mint tokens to
@@ -50,15 +49,18 @@ contract MyERC20 is ERC20, Ownable {
         require(mintingEnabled, "Minting is disabled");
         require(to != address(0), "Cannot mint to zero address");
         require(amount > 0, "Amount must be greater than 0");
-        
+
         if (maxSupply > 0) {
-            require(totalSupply() + amount <= maxSupply, "Would exceed max supply");
+            require(
+                totalSupply() + amount <= maxSupply,
+                "Would exceed max supply"
+            );
         }
-        
+
         _mint(to, amount);
         emit TokensMinted(to, amount);
     }
-    
+
     /**
      * @dev Burn tokens from caller
      * @param amount The amount of tokens to burn
@@ -66,11 +68,11 @@ contract MyERC20 is ERC20, Ownable {
     function burn(uint256 amount) public {
         require(amount > 0, "Amount must be greater than 0");
         require(balanceOf(msg.sender) >= amount, "Insufficient balance");
-        
+
         _burn(msg.sender, amount);
         emit TokensBurned(msg.sender, amount);
     }
-    
+
     /**
      * @dev Burn tokens from a specific address (owner only)
      * @param from The address to burn tokens from
@@ -80,21 +82,24 @@ contract MyERC20 is ERC20, Ownable {
         require(from != address(0), "Cannot burn from zero address");
         require(amount > 0, "Amount must be greater than 0");
         require(balanceOf(from) >= amount, "Insufficient balance");
-        
+
         _burn(from, amount);
         emit TokensBurned(from, amount);
     }
-    
+
     /**
      * @dev Update the maximum supply (owner only)
      * @param newMaxSupply The new maximum supply
      */
     function setMaxSupply(uint256 newMaxSupply) public onlyOwner {
-        require(newMaxSupply == 0 || newMaxSupply >= totalSupply(), "Max supply cannot be less than current supply");
+        require(
+            newMaxSupply == 0 || newMaxSupply >= totalSupply(),
+            "Max supply cannot be less than current supply"
+        );
         maxSupply = newMaxSupply;
         emit MaxSupplyUpdated(newMaxSupply);
     }
-    
+
     /**
      * @dev Enable or disable minting (owner only)
      * @param enabled Whether minting should be enabled
@@ -102,7 +107,7 @@ contract MyERC20 is ERC20, Ownable {
     function setMintingEnabled(bool enabled) public onlyOwner {
         mintingEnabled = enabled;
     }
-    
+
     /**
      * @dev Get the remaining tokens that can be minted
      * @return The number of tokens remaining (0 if unlimited)
@@ -113,7 +118,7 @@ contract MyERC20 is ERC20, Ownable {
         }
         return maxSupply - totalSupply();
     }
-    
+
     /**
      * @dev Check if the maximum supply has been reached
      * @return True if max supply is reached
@@ -121,4 +126,4 @@ contract MyERC20 is ERC20, Ownable {
     function isMaxSupplyReached() public view returns (bool) {
         return maxSupply > 0 && totalSupply() >= maxSupply;
     }
-} 
+}
