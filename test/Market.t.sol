@@ -101,7 +101,7 @@ contract MarketTest is Test {
         uint256 expectedPayment = (amountToBuy * pricePerToken) / 1e18;
 
         tokenB.approve(address(market), expectedPayment);
-        market.fillOrder(1, amountToBuy);
+        market.fillOrder(1, amountToBuy, pricePerToken);
         vm.stopPrank();
 
         // Verify order was partially filled
@@ -131,7 +131,7 @@ contract MarketTest is Test {
         uint256 expectedPayment = (amountToSell * pricePerToken) / 1e18;
 
         tokenB.approve(address(market), expectedPayment);
-        market.fillOrder(1, amountToSell);
+        market.fillOrder(1, amountToSell, pricePerToken);
         vm.stopPrank();
 
         // Verify order was fully filled and deactivated
@@ -223,7 +223,7 @@ contract MarketTest is Test {
 
         tokenB.approve(address(market), expectedPayment);
         vm.expectRevert("Amount below minimum order size");
-        market.fillOrder(1, amountToBuy); // This should revert
+        market.fillOrder(1, amountToBuy, pricePerToken); // This should revert
         vm.stopPrank();
     }
 

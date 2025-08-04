@@ -34,8 +34,7 @@ contract P2PMarket is
     }
 
     // State variables
-    uint256 private _orderIds;
-
+    uint256 private _latestOrderId;
     mapping(uint256 id => Order) public orders;
 
     // Events
@@ -63,6 +62,11 @@ contract P2PMarket is
         uint256 newMinOrderSize
     );
 
+    modifier onlyEOA() {
+        require(sendIsNotContract(), "Only EOA can call this function");
+        _;
+    }
+
     function initialize() public initializer {
         __Ownable_init(msg.sender);
         __ReentrancyGuard_init();
@@ -88,7 +92,7 @@ contract P2PMarket is
         uint256 amountToSell,
         uint256 pricePerToken,
         uint256 minOrderSize
-    ) external nonReentrant whenNotPaused {
+    ) external nonReentrant whenNotPaused onlyEOA {
         require(
             tokenToSell != address(0) && tokenToPay != address(0),
             "Invalid token addresses"
@@ -107,8 +111,8 @@ contract P2PMarket is
             amountToSell
         );
 
-        _orderIds++;
-        uint256 orderId = _orderIds;
+        _latestOrderId++;
+        uint256 orderId = _latestOrderId;
 
         orders[orderId] = Order({
             orderId: orderId,
@@ -137,10 +141,12 @@ contract P2PMarket is
      * @dev Fill an order (partially or fully)
      * @param orderId ID of the order to fill
      * @param amountToBuy Amount of tokenToSell to buy
+     * @param maxPricePerToken Maximum price per token to pay. It prevents front-run and sand-wich attack.
      */
     function fillOrder(
         uint256 orderId,
-        uint256 amountToBuy
+        uint256 amountToBuy,
+        uint256 maxPricePerToken
     ) external nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
         require(amountToBuy > 0, "Amount must be greater than 0");
@@ -152,11 +158,19 @@ contract P2PMarket is
             amountToBuy >= order.minOrderSize,
             "Amount below minimum order size"
         );
+        require(
+            order.pricePerToken <= maxPricePerToken,
+            "Price exceeds max price"
+        );
 
         uint256 paymentAmount = (amountToBuy * order.pricePerToken) /
             (10 ** ERC20(order.tokenToSell).decimals());
 
         order.amountRemaining -= amountToBuy;
+
+        if (order.amountRemaining == 0) {
+            delete orders[orderId];
+        }
 
         IERC20(order.tokenToPay).transferFrom(
             msg.sender,
@@ -166,10 +180,6 @@ contract P2PMarket is
         IERC20(order.tokenToSell).transfer(msg.sender, amountToBuy);
         IERC20(order.tokenToPay).transfer(order.seller, paymentAmount);
 
-        if (order.amountRemaining == 0) {
-            delete orders[orderId];
-        }
-
         emit OrderFilled(orderId, msg.sender, amountToBuy, paymentAmount);
     }
 
@@ -178,7 +188,7 @@ contract P2PMarket is
      * @param orderId ID of the order to cancel
      */
     function cancelOrder(uint256 orderId) external nonReentrant whenNotPaused {
-        Order storage order = orders[orderId];
+        Order memory order = orders[orderId];
         require(order.seller == msg.sender, "Only seller can cancel");
 
         // Return remaining tokens to seller
@@ -233,7 +243,7 @@ contract P2PMarket is
      * @return Total order count
      */
     function getTotalOrders() external view returns (uint256) {
-        return _orderIds;
+        return _latestOrderId;
     }
 
     /**
@@ -257,5 +267,16 @@ contract P2PMarket is
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    function sendIsNotContract() internal view returns (bool) {
+        // check size code
+        // check sender == origin
+        uint256 size;
+        address sender = msg.sender;
+        assembly {
+            size := extcodesize(sender)
+        }
+        return size == 0 && sender == tx.origin;
     }
 }
