@@ -58,6 +58,7 @@ contract P2PMarket is
     event OrderCancelled(uint256 indexed orderId, address indexed seller);
     event OrderUpdated(
         uint256 indexed orderId,
+        uint256 newAmountToSell,
         uint256 newPrice,
         uint256 newMinOrderSize
     );
@@ -138,6 +139,34 @@ contract P2PMarket is
     }
 
     /**
+     * @dev Update order price and minimum order size (seller only)
+     * @param orderId ID of the order to update
+     * @param newPrice New price per token
+     * @param newMinOrderSize New minimum order size
+     */
+    function updateOrder(
+        uint256 orderId,
+        uint256 newAmountToSell,
+        uint256 newPrice,
+        uint256 newMinOrderSize
+    ) external whenNotPaused {
+        Order storage order = orders[orderId];
+        require(order.seller == msg.sender, "Only seller can update");
+        require(newAmountToSell > 0, "Amount must be greater than 0");
+        require(newPrice > 0, "Price must be greater than 0");
+        require(
+            newMinOrderSize > 0 && newMinOrderSize <= order.amountRemaining,
+            "Invalid min order size"
+        );
+
+        order.amountToSell = newAmountToSell;
+        order.pricePerToken = newPrice;
+        order.minOrderSize = newMinOrderSize;
+
+        emit OrderUpdated(orderId, newAmountToSell, newPrice, newMinOrderSize);
+    }
+
+    /**
      * @dev Fill an order (partially or fully)
      * @param orderId ID of the order to fill
      * @param amountToBuy Amount of tokenToSell to buy
@@ -149,6 +178,7 @@ contract P2PMarket is
         uint256 maxPricePerToken
     ) external nonReentrant whenNotPaused {
         Order storage order = orders[orderId];
+        require(order.seller != address(0), "Invalid order ID");
         require(amountToBuy > 0, "Amount must be greater than 0");
         require(
             amountToBuy <= order.amountRemaining,
@@ -168,17 +198,16 @@ contract P2PMarket is
 
         order.amountRemaining -= amountToBuy;
 
-        if (order.amountRemaining == 0) {
-            delete orders[orderId];
-        }
-
         IERC20(order.tokenToPay).transferFrom(
             msg.sender,
-            address(this),
+            order.seller,
             paymentAmount
         );
         IERC20(order.tokenToSell).transfer(msg.sender, amountToBuy);
-        IERC20(order.tokenToPay).transfer(order.seller, paymentAmount);
+
+        if (order.amountRemaining == 0) {
+            delete orders[orderId];
+        }
 
         emit OrderFilled(orderId, msg.sender, amountToBuy, paymentAmount);
     }
@@ -205,28 +234,18 @@ contract P2PMarket is
     }
 
     /**
-     * @dev Update order price and minimum order size (seller only)
-     * @param orderId ID of the order to update
-     * @param newPrice New price per token
-     * @param newMinOrderSize New minimum order size
+     * @dev Emergency function to recover stuck tokens (owner only)
+     * @param token Address of the token to recover
+     * @param amount Amount to recover
+     * @param to Address to send tokens to
      */
-    function updateOrder(
-        uint256 orderId,
-        uint256 newPrice,
-        uint256 newMinOrderSize
-    ) external whenNotPaused {
-        Order storage order = orders[orderId];
-        require(order.seller == msg.sender, "Only seller can update");
-        require(newPrice > 0, "Price must be greater than 0");
-        require(
-            newMinOrderSize > 0 && newMinOrderSize <= order.amountRemaining,
-            "Invalid min order size"
-        );
-
-        order.pricePerToken = newPrice;
-        order.minOrderSize = newMinOrderSize;
-
-        emit OrderUpdated(orderId, newPrice, newMinOrderSize);
+    function emergencyRecover(
+        address token,
+        uint256 amount,
+        address to
+    ) external onlyOwner {
+        require(to != address(0), "Invalid recipient");
+        IERC20(token).transfer(to, amount);
     }
 
     /**
@@ -246,21 +265,6 @@ contract P2PMarket is
         return _latestOrderId;
     }
 
-    /**
-     * @dev Emergency function to recover stuck tokens (owner only)
-     * @param token Address of the token to recover
-     * @param amount Amount to recover
-     * @param to Address to send tokens to
-     */
-    function emergencyRecover(
-        address token,
-        uint256 amount,
-        address to
-    ) external onlyOwner {
-        require(to != address(0), "Invalid recipient");
-        IERC20(token).transfer(to, amount);
-    }
-
     function pause() external onlyOwner {
         _pause();
     }
@@ -277,6 +281,6 @@ contract P2PMarket is
         assembly {
             size := extcodesize(sender)
         }
-        return size == 0 && sender == tx.origin;
+        return size == 0;
     }
 }

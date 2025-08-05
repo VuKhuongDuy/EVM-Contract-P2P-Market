@@ -190,7 +190,7 @@ contract MarketTest is Test {
         vm.startPrank(seller);
         uint256 newPrice = 3 * 10 ** 18;
         uint256 newMinOrderSize = 200 * 10 ** 18;
-        market.updateOrder(1, newPrice, newMinOrderSize);
+        market.updateOrder(1, amountToSell, newPrice, newMinOrderSize);
         vm.stopPrank();
 
         // Verify order was updated

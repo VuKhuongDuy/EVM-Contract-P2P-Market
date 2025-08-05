@@ -45,7 +45,7 @@ contract MyERC20 is ERC20, Ownable {
      * @param to The address to mint tokens to
      * @param amount The amount of tokens to mint
      */
-    function mint(address to, uint256 amount) public onlyOwner {
+    function mint(address to, uint256 amount) public {
         require(mintingEnabled, "Minting is disabled");
         require(to != address(0), "Cannot mint to zero address");
         require(amount > 0, "Amount must be greater than 0");
